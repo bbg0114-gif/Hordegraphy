@@ -124,17 +124,6 @@ const MonthlyStatistics: React.FC<MonthlyStatisticsProps> = ({
                   </span>
                   <span className="text-sm font-black text-slate-400 mt-1">회</span>
                 </div>
-                <div className="w-32 lg:w-48 h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-1000 ${
-                      idx === 0 ? 'bg-amber-400' : 
-                      idx === 1 ? 'bg-slate-400' : 
-                      idx === 2 ? 'bg-orange-400' : 
-                      'bg-blue-400'
-                    }`}
-                    style={{ width: `${Math.min((stat.count / sortedStats[0].count) * 100, 100)}%` }}
-                  />
-                </div>
               </div>
             </div>
           ))
