@@ -1,0 +1,377 @@
+
+import React, { useState, useEffect } from 'react';
+import Layout from './components/Layout';
+import MemberManager from './components/MemberManager';
+import AttendanceGrid from './components/AttendanceGrid';
+import Dashboard from './components/Dashboard';
+import AIReport from './components/AIReport';
+import Settings from './components/Settings';
+import BlacklistManager from './components/BlacklistManager';
+import SuggestionBox from './components/SuggestionBox';
+import { Member, AttendanceRecord, ViewMode, SessionAttendance, MetadataRecord, BannedMember, Suggestion, AttendanceStatus, FirebaseConfig } from './types';
+import { storageService, DEFAULT_SESSIONS } from './services/storageService';
+
+const App: React.FC = () => {
+  const [activeView, setActiveView] = useState<ViewMode>(ViewMode.DASHBOARD);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  
+  const [members, setMembers] = useState<Member[]>([]);
+  const [bannedMembers, setBannedMembers] = useState<BannedMember[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord>({});
+  const [metadata, setMetadata] = useState<MetadataRecord>({});
+  const [onlineAttendance, setOnlineAttendance] = useState<AttendanceRecord>({});
+  const [onlineMetadata, setOnlineMetadata] = useState<MetadataRecord>({});
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [globalSessionNames, setGlobalSessionNames] = useState<string[]>(DEFAULT_SESSIONS);
+  const [clubLink, setClubLink] = useState('');
+
+  const loadData = () => {
+    setMembers(storageService.getMembers());
+    setBannedMembers(storageService.getBannedMembers());
+    setSuggestions(storageService.getSuggestions());
+    setAttendance(storageService.getAttendance());
+    setMetadata(storageService.getMetadata());
+    setOnlineAttendance(storageService.getOnlineAttendance());
+    setOnlineMetadata(storageService.getOnlineMetadata());
+    setGlobalSessionNames(storageService.getGlobalSessionNames());
+    setClubLink(storageService.getClubLink());
+  };
+
+  useEffect(() => {
+    loadData();
+    const savedAdmin = sessionStorage.getItem('is_admin') === 'true';
+    if (savedAdmin) setIsAdmin(true);
+
+    // Try to auto-init Firebase if config exists
+    const cloudConfig = storageService.getFirebaseConfig();
+    if (cloudConfig) {
+      handleSetupFirebase(cloudConfig);
+    }
+  }, []);
+
+  const handleSetupFirebase = (config: FirebaseConfig) => {
+    if (storageService.initFirebase(config)) {
+      setIsCloudSyncing(true);
+      // Subscribe to real-time updates
+      storageService.subscribe((data) => {
+        if (data.members) setMembers(data.members);
+        if (data.bannedMembers) setBannedMembers(data.bannedMembers);
+        if (data.attendance) setAttendance(data.attendance);
+        if (data.metadata) setMetadata(data.metadata);
+        if (data.onlineAttendance) setOnlineAttendance(data.onlineAttendance);
+        if (data.onlineMetadata) setOnlineMetadata(data.onlineMetadata);
+        if (data.globalSessionNames) setGlobalSessionNames(data.globalSessionNames);
+        if (data.clubLink) setClubLink(data.clubLink);
+        if (data.suggestions) setSuggestions(data.suggestions);
+      });
+    }
+  };
+
+  const handleAdminToggle = (status: boolean) => {
+    setIsAdmin(status);
+    sessionStorage.setItem('is_admin', status.toString());
+  };
+
+  const dateStr = selectedDate.toISOString().split('T')[0];
+  
+  const currentDailyMeta = metadata[dateStr] || {};
+  const currentSessionNames = currentDailyMeta.sessionNames || globalSessionNames;
+  const currentSessionHosts = currentDailyMeta.sessionHosts || ['', '', '', ''];
+  const currentSessionCount = currentDailyMeta.sessionCount || 1;
+
+  const currentOnlineMeta = onlineMetadata[dateStr] || {};
+  const currentOnlineNames = currentOnlineMeta.sessionNames || ['온라인 1', '온라인 2', '온라인 3', '온라인 4'];
+  const currentOnlineHosts = currentOnlineMeta.sessionHosts || ['', '', '', ''];
+  const currentOnlineCount = currentOnlineMeta.sessionCount || 1;
+
+  const handleAddMember = (name: string) => {
+    if (!isAdmin) return;
+    if (bannedMembers.some(bm => bm.name === name)) {
+      alert('해당 닉네임은 블랙리스트에 등록되어 있어 추가할 수 없습니다.');
+      return;
+    }
+    const newMember: Member = {
+      id: crypto.randomUUID(),
+      name,
+      joinedAt: '2026-01-01',
+      previousNames: []
+    };
+    const updated = [...members, newMember];
+    setMembers(updated);
+    storageService.saveMembers(updated);
+  };
+
+  const handleUpdateMember = (id: string, updates: Partial<Member>) => {
+    if (!isAdmin) return;
+    const updated = members.map(m => {
+      if (m.id === id) {
+        let newHistory = m.previousNames || [];
+        if (updates.name && updates.name !== m.name) {
+          newHistory = [m.name, ...newHistory].slice(0, 3);
+        }
+        return { ...m, ...updates, previousNames: newHistory };
+      }
+      return m;
+    });
+    setMembers(updated);
+    storageService.saveMembers(updated);
+  };
+
+  const handleBulkUpdateMembers = (updatedMembers: Member[]) => {
+    if (!isAdmin) return;
+    const finalMembers = updatedMembers.map(updated => {
+      const original = members.find(m => m.id === updated.id);
+      if (original && updated.name !== original.name) {
+        const currentHistory = original.previousNames || [];
+        const newHistory = [original.name, ...currentHistory].slice(0, 3);
+        return { ...updated, previousNames: newHistory };
+      }
+      return updated;
+    });
+    setMembers(finalMembers);
+    storageService.saveMembers(finalMembers);
+  };
+
+  const handleDeleteMember = (id: string) => {
+    if (!isAdmin) return;
+    if (window.confirm('정말 이 회원을 삭제하시겠습니까? 관련 데이터가 모두 사라집니다.')) {
+      const updated = members.filter(m => m.id !== id);
+      setMembers(updated);
+      storageService.saveMembers(updated);
+      
+      const updateAt = (record: AttendanceRecord, setRecord: (r: AttendanceRecord) => void, save: (r: AttendanceRecord) => void) => {
+        const newR = { ...record };
+        Object.keys(newR).forEach(date => {
+          if (newR[date]) delete newR[date][id];
+        });
+        setRecord(newR);
+        save(newR);
+      }
+      updateAt(attendance, setAttendance, storageService.saveAttendance);
+      updateAt(onlineAttendance, setOnlineAttendance, storageService.saveOnlineAttendance);
+    }
+  };
+
+  const handleAddBanned = (name: string, reason: string) => {
+    if (!isAdmin) return;
+    const newBanned: BannedMember = {
+      id: crypto.randomUUID(),
+      name,
+      reason,
+      bannedAt: new Date().toISOString().split('T')[0]
+    };
+    const updated = [...bannedMembers, newBanned];
+    setBannedMembers(updated);
+    storageService.saveBannedMembers(updated);
+  };
+
+  const handleDeleteBanned = (id: string) => {
+    if (!isAdmin) return;
+    const updated = bannedMembers.filter(bm => bm.id !== id);
+    setBannedMembers(updated);
+    storageService.saveBannedMembers(updated);
+  };
+
+  const handleAddSuggestion = (content: string, author: string) => {
+    const newSuggestion: Suggestion = {
+      id: crypto.randomUUID(),
+      content,
+      author: author || '익명',
+      createdAt: new Date().toLocaleString()
+    };
+    const updated = [newSuggestion, ...suggestions];
+    setSuggestions(updated);
+    storageService.saveSuggestions(updated);
+  };
+
+  const handleDeleteSuggestion = (id: string) => {
+    if (!isAdmin) return;
+    const updated = suggestions.filter(s => s.id !== id);
+    setSuggestions(updated);
+    storageService.saveSuggestions(updated);
+  };
+
+  const handleUpdateAttendance = (memberId: string, sessionIdx: number, value: any) => {
+    if (!isAdmin) return;
+    const newAttendance = { ...attendance };
+    if (!newAttendance[dateStr]) newAttendance[dateStr] = {};
+    if (!newAttendance[dateStr][memberId]) {
+      newAttendance[dateStr][memberId] = [0, 0, 0, 0];
+    }
+    const currentSessions = [...newAttendance[dateStr][memberId]] as SessionAttendance;
+    const current = currentSessions[sessionIdx];
+    const next = ((Number(current) + 1) % 3) as AttendanceStatus;
+    currentSessions[sessionIdx] = next;
+    newAttendance[dateStr][memberId] = currentSessions;
+    setAttendance(newAttendance);
+    storageService.saveAttendance(newAttendance);
+  };
+
+  const handleUpdateOnlineAttendance = (memberId: string, sessionIdx: number, value: any) => {
+    if (!isAdmin) return;
+    const newAttendance = { ...onlineAttendance };
+    if (!newAttendance[dateStr]) newAttendance[dateStr] = {};
+    if (!newAttendance[dateStr][memberId]) {
+      newAttendance[dateStr][memberId] = [0, 0, 0, 0];
+    }
+    const currentSessions = [...newAttendance[dateStr][memberId]] as SessionAttendance;
+    const current = currentSessions[sessionIdx];
+    const next = ((Number(current) + 1) % 3) as AttendanceStatus;
+    currentSessions[sessionIdx] = next;
+    newAttendance[dateStr][memberId] = currentSessions;
+    setOnlineAttendance(newAttendance);
+    storageService.saveOnlineAttendance(newAttendance);
+  };
+
+  const handleUpdateDailyMetadata = (names: string[], hosts: string[], count: number) => {
+    if (!isAdmin) return;
+    const newMetadata = { ...metadata };
+    if (!newMetadata[dateStr]) newMetadata[dateStr] = {};
+    newMetadata[dateStr].sessionNames = names;
+    newMetadata[dateStr].sessionHosts = hosts;
+    newMetadata[dateStr].sessionCount = count;
+    setMetadata(newMetadata);
+    storageService.saveMetadata(newMetadata);
+  };
+
+  const handleUpdateOnlineMetadata = (names: string[], hosts: string[], count: number) => {
+    if (!isAdmin) return;
+    const newMetadata = { ...onlineMetadata };
+    if (!newMetadata[dateStr]) newMetadata[dateStr] = {};
+    newMetadata[dateStr].sessionNames = names;
+    newMetadata[dateStr].sessionHosts = hosts;
+    newMetadata[dateStr].sessionCount = count;
+    setOnlineMetadata(newMetadata);
+    storageService.saveOnlineMetadata(newMetadata);
+  };
+
+  const handleClearMonth = () => {
+    if (!isAdmin) return;
+    const updated = storageService.clearMonthData(selectedDate.getFullYear(), selectedDate.getMonth(), attendance);
+    setAttendance(updated);
+    storageService.saveAttendance(updated);
+    
+    const updatedOnline = storageService.clearMonthData(selectedDate.getFullYear(), selectedDate.getMonth(), onlineAttendance);
+    setOnlineAttendance(updatedOnline);
+    storageService.saveOnlineAttendance(updatedOnline);
+  };
+
+  const handleUpdateClubLink = (link: string) => {
+    if (!isAdmin) return;
+    setClubLink(link);
+    storageService.saveClubLink(link);
+  };
+
+  return (
+    <Layout activeView={activeView} setActiveView={setActiveView} isAdmin={isAdmin} setIsAdmin={handleAdminToggle}>
+      <div className="fixed top-20 right-10 z-50">
+        {isCloudSyncing ? (
+          <div className="bg-green-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg flex items-center gap-2 animate-pulse">
+            <div className="w-1.5 h-1.5 bg-white rounded-full" />
+            LIVE CLOUD SYNC
+          </div>
+        ) : (
+          <div className="bg-slate-400 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
+            <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+            LOCAL ONLY
+          </div>
+        )}
+      </div>
+
+      {activeView === ViewMode.DASHBOARD && (
+        <Dashboard 
+          members={members} 
+          attendance={attendance} 
+          onlineAttendance={onlineAttendance}
+          metadata={metadata}
+          onlineMetadata={onlineMetadata}
+          globalSessionNames={globalSessionNames}
+          selectedMonth={selectedDate}
+          setSelectedMonth={setSelectedDate}
+          onClearMonth={handleClearMonth}
+          isAdmin={isAdmin}
+          clubLink={clubLink}
+        />
+      )}
+      
+      {activeView === ViewMode.ATTENDANCE && (
+        <AttendanceGrid 
+          members={members}
+          attendance={attendance}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          onUpdate={handleUpdateAttendance}
+          sessionNames={currentSessionNames}
+          sessionHosts={currentSessionHosts}
+          sessionCount={currentSessionCount}
+          onUpdateMetadata={handleUpdateDailyMetadata}
+          onAddMember={handleAddMember}
+          isAdmin={isAdmin}
+          title="벙 참여 현황"
+        />
+      )}
+
+      {activeView === ViewMode.ONLINE_ATTENDANCE && (
+        <AttendanceGrid 
+          members={members}
+          attendance={onlineAttendance}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          onUpdate={handleUpdateOnlineAttendance}
+          sessionNames={currentOnlineNames}
+          sessionHosts={currentOnlineHosts}
+          sessionCount={currentOnlineCount}
+          onUpdateMetadata={handleUpdateOnlineMetadata}
+          onAddMember={handleAddMember}
+          isAdmin={isAdmin}
+          title="온라인 벙 현황"
+        />
+      )}
+      
+      {activeView === ViewMode.MEMBERS && (
+        <MemberManager 
+          members={members}
+          attendance={attendance}
+          onlineAttendance={onlineAttendance}
+          selectedDate={selectedDate}
+          onAdd={handleAddMember}
+          onUpdate={handleUpdateMember}
+          onBulkUpdate={handleBulkUpdateMembers}
+          onDelete={handleDeleteMember}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {activeView === ViewMode.SUGGESTIONS && (
+        <SuggestionBox 
+          suggestions={suggestions}
+          onAdd={handleAddSuggestion}
+          onDelete={handleDeleteSuggestion}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {activeView === ViewMode.AI_REPORT && (
+        <AIReport members={members} attendance={attendance} />
+      )}
+
+      {activeView === ViewMode.SETTINGS && (
+        <Settings 
+          onDataImport={loadData} 
+          isAdmin={isAdmin} 
+          clubLink={clubLink} 
+          onUpdateClubLink={handleUpdateClubLink}
+          onSetupFirebase={handleSetupFirebase}
+        />
+      )}
+
+      {activeView === ViewMode.BLACKLIST && (
+        <BlacklistManager bannedMembers={bannedMembers} onAdd={handleAddBanned} onDelete={handleDeleteBanned} isAdmin={isAdmin} />
+      )}
+    </Layout>
+  );
+};
+
+export default App;
