@@ -6,7 +6,13 @@ import { getDatabase, ref, onValue, set } from 'firebase/database';
 // 1. 아래 내용을 본인의 Firebase 설정값으로 바꿔주세요!
 // (Firebase 콘솔 > 프로젝트 설정 > 일반 > 내 앱 > SDK 설정 및 구성 에서 확인 가능)
 // -----------------------------------------------------------
-const firebaseConfig: FirebaseConfig = {
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
   apiKey: "AIzaSyBnp6vXjDZkRdVpGIaqec6g5qT9eTIRKbc",
   authDomain: "hordegraphy.firebaseapp.com",
   databaseURL: "https://hordegraphy-default-rtdb.firebaseio.com",
