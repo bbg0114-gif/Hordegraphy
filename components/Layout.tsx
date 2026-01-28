@@ -31,13 +31,26 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, setActiveView, is
   const [showLogin, setShowLogin] = useState(false);
   const [password, setPassword] = useState('');
 
+  // 1. HOME
+  // 2. 월별 (통계)
+  // 3. 벙왕 (명예의전당)
+  // 4. 회원 (관리)
+  // 5. 건의함
+  // --- Divider ---
+  // 6. 현황 (오프라인 벙)
+  // 7. 온라인 (온라인 벙)
+  // 8. 블랙 (블랙리스트)
+  // 9. AI (리포트)
+  // 10. 설정 (백업/연동)
   const menuItems = [
     { id: ViewMode.DASHBOARD, label: 'HOME', fullLabel: 'HOME', icon: LayoutDashboard },
-    { id: ViewMode.ATTENDANCE, label: '현황', fullLabel: '벙 참여 현황', icon: CalendarCheck },
     { id: ViewMode.MONTHLY_STATISTICS, label: '월별', fullLabel: '월별 참여 현황', icon: BarChart3 },
     { id: ViewMode.HALL_OF_FAME, label: '벙왕', fullLabel: '역대 벙왕', icon: Crown },
     { id: ViewMode.MEMBERS, label: '회원', fullLabel: '회원 관리', icon: Users },
     { id: ViewMode.SUGGESTIONS, label: '건의함', fullLabel: '건의함', icon: MessageSquareQuote },
+    
+    // Admin Section
+    { id: ViewMode.ATTENDANCE, label: '현황', fullLabel: '벙 참여 현황', icon: CalendarCheck, isDivider: true },
     { id: ViewMode.ONLINE_ATTENDANCE, label: '온라인', fullLabel: '온라인 벙 현황', icon: Globe },
     { id: ViewMode.BLACKLIST, label: '블랙', fullLabel: '블랙리스트 관리', icon: UserX },
     { id: ViewMode.AI_REPORT, label: 'AI', fullLabel: 'AI 분석 리포트', icon: Sparkles },
@@ -77,25 +90,33 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, setActiveView, is
         
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto pb-6">
           {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all ${
-                activeView === item.id
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <item.icon className={`w-5 h-5 ${activeView === item.id ? 'text-white' : 'text-slate-400'}`} />
-              {item.fullLabel}
-            </button>
+            <React.Fragment key={item.id}>
+              {/* Divider for Admin Section */}
+              {item.isDivider && (
+                <div className="pt-6 pb-2 px-4">
+                  <div className="h-px bg-slate-100 mb-3" />
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Admin Management</p>
+                </div>
+              )}
+              <button
+                onClick={() => setActiveView(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all ${
+                  activeView === item.id
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <item.icon className={`w-5 h-5 ${activeView === item.id ? 'text-white' : 'text-slate-400'}`} />
+                {item.fullLabel}
+              </button>
+            </React.Fragment>
           ))}
         </nav>
         
         <div className="p-6 border-t border-slate-100">
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Status</p>
-            <p className="text-xs font-bold text-slate-600 mt-1">v1.6.0 Stats-Plus</p>
+            <p className="text-xs font-bold text-slate-600 mt-1">v1.6.5 Admin-Refined</p>
           </div>
         </div>
       </aside>
@@ -161,25 +182,28 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, setActiveView, is
         {/* Mobile Nav */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 h-16 flex items-center justify-around px-2 z-40 shadow-xl overflow-x-auto">
           {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={`flex flex-col items-center justify-center gap-1 min-w-[50px] flex-1 h-full transition-colors ${
-                activeView === item.id ? 'text-blue-600' : 'text-slate-400'
-              }`}
-            >
-              <item.icon className={`w-5 h-5 ${activeView === item.id ? 'scale-110' : ''}`} />
-              <span className="text-[8px] font-black uppercase tracking-tighter">
-                {item.label}
-              </span>
-            </button>
+            <React.Fragment key={item.id}>
+              {/* Mobile Divider (Thin line) */}
+              {item.isDivider && <div className="w-px h-8 bg-slate-100 shrink-0 mx-1" />}
+              <button
+                onClick={() => setActiveView(item.id)}
+                className={`flex flex-col items-center justify-center gap-1 min-w-[50px] flex-1 h-full transition-colors ${
+                  activeView === item.id ? 'text-blue-600' : 'text-slate-400'
+                }`}
+              >
+                <item.icon className={`w-5 h-5 ${activeView === item.id ? 'scale-110' : ''}`} />
+                <span className="text-[8px] font-black uppercase tracking-tighter">
+                  {item.label}
+                </span>
+              </button>
+            </React.Fragment>
           ))}
         </nav>
 
         {/* Login Modal */}
         {showLogin && (
           <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-8 lg:p-10 animate-in fade-in zoom-in-95">
+            <div className="bg-white w-full max-sm rounded-[32px] shadow-2xl p-8 lg:p-10 animate-in fade-in zoom-in-95">
               <div className="flex flex-col items-center text-center mb-8">
                 <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-5 shadow-inner">
                   <Lock className="w-8 h-8" />
