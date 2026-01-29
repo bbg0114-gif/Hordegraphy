@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, AttendanceRecord, AttendanceStatus } from '../types';
-import { UserPlus, Trash2, Search, CalendarDays, Sparkles, UserCheck, Clock, AlertCircle, Edit2, Check, X, Lock, ShieldCheck, User as UserIcon, Save, Table as TableIcon, Users, UserRoundPlus, Zap, Trophy, Crown, UserX } from 'lucide-react';
+import { UserPlus, Trash2, Search, CalendarDays, Sparkles, UserCheck, Clock, AlertCircle, Edit2, Check, X, Lock, ShieldCheck, User as UserIcon, Save, Table as TableIcon, Users, UserRoundPlus, Zap, Trophy, Crown, UserX, Filter } from 'lucide-react';
 import { matchSearch } from '../utils/chosung';
 
 interface MemberManagerProps {
@@ -15,6 +15,8 @@ interface MemberManagerProps {
   onDelete: (id: string) => void;
   isAdmin: boolean;
 }
+
+type FilterMode = 'all' | 'new' | 'inactive';
 
 const MemberManager: React.FC<MemberManagerProps> = ({ 
   members, 
@@ -31,11 +33,35 @@ const MemberManager: React.FC<MemberManagerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isBulkEdit, setIsBulkEdit] = useState(false);
   const [bulkData, setBulkData] = useState<Member[]>([]);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
   const today = new Date();
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
   const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+  const getLastAttendanceDate = (memberId: string) => {
+    const dates = Object.keys(attendance).sort((a, b) => b.localeCompare(a));
+    for (const date of dates) {
+      const dayData = attendance[date];
+      if (dayData[memberId]?.some(s => Number(s) === 1)) return date;
+    }
+    return null;
+  };
+
+  const getDaysDiff = (dateStr: string) => {
+    const lastDate = new Date(dateStr);
+    const diffTime = Math.abs(today.getTime() - lastDate.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const isMemberInactive = (m: Member) => {
+    const lastDate = getLastAttendanceDate(m.id);
+    if (!lastDate) return false;
+    const isNew = m.joinedAt.startsWith(monthPrefix);
+    const days = getDaysDiff(lastDate);
+    return (isNew && days >= 60) || (!isNew && days >= 120);
+  };
 
   const sortedMembers = useMemo(() => {
     return [...members].sort((a, b) => {
@@ -48,8 +74,22 @@ const MemberManager: React.FC<MemberManagerProps> = ({
   }, [members]);
 
   const filteredMembers = useMemo(() => {
-    return sortedMembers.filter(m => matchSearch(m.name, searchTerm));
-  }, [sortedMembers, searchTerm]);
+    let result = sortedMembers;
+
+    // 대시보드 카테고리 필터
+    if (filterMode === 'new') {
+      result = result.filter(m => m.joinedAt.startsWith(monthPrefix));
+    } else if (filterMode === 'inactive') {
+      result = result.filter(m => isMemberInactive(m));
+    }
+
+    // 검색어 필터
+    if (searchTerm) {
+      result = result.filter(m => matchSearch(m.name, searchTerm));
+    }
+
+    return result;
+  }, [sortedMembers, searchTerm, filterMode, monthPrefix]);
 
   useEffect(() => {
     if (isBulkEdit) {
@@ -74,15 +114,6 @@ const MemberManager: React.FC<MemberManagerProps> = ({
       onBulkUpdate(bulkData);
       setIsBulkEdit(false);
     }
-  };
-
-  const getLastAttendanceDate = (memberId: string) => {
-    const dates = Object.keys(attendance).sort((a, b) => b.localeCompare(a));
-    for (const date of dates) {
-      const dayData = attendance[date];
-      if (dayData[memberId]?.some(s => Number(s) === 1)) return date;
-    }
-    return null;
   };
 
   const getTotalAttendanceCount = (memberId: string) => {
@@ -113,28 +144,22 @@ const MemberManager: React.FC<MemberManagerProps> = ({
     return total;
   };
 
-  const getDaysDiff = (dateStr: string) => {
-    const lastDate = new Date(dateStr);
-    const diffTime = Math.abs(today.getTime() - lastDate.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
   const newMembersThisMonth = members.filter(m => m.joinedAt.startsWith(monthPrefix));
   const staffCount = members.filter(m => m.isStaff).length;
   const leaderCount = members.filter(m => m.isLeader).length;
-  const inactiveCount = members.filter(m => {
-    const lastDate = getLastAttendanceDate(m.id);
-    if (!lastDate) return false;
-    const isNew = m.joinedAt.startsWith(monthPrefix);
-    const days = getDaysDiff(lastDate);
-    return (isNew && days >= 60) || (!isNew && days >= 120);
-  }).length;
+  const inactiveCount = members.filter(m => isMemberInactive(m)).length;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24">
       {!isBulkEdit && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="bg-white rounded-[32px] p-6 lg:p-8 border border-slate-200 shadow-sm flex flex-col justify-between overflow-hidden relative group hover:shadow-xl hover:shadow-blue-50 transition-all">
+          {/* 전체 회원 카드 */}
+          <button 
+            onClick={() => setFilterMode('all')}
+            className={`text-left bg-white rounded-[32px] p-6 lg:p-8 border shadow-sm flex flex-col justify-between overflow-hidden relative group transition-all ${
+              filterMode === 'all' ? 'border-blue-500 ring-2 ring-blue-50 shadow-xl' : 'border-slate-200 hover:shadow-xl hover:shadow-blue-50'
+            }`}
+          >
             <div className="absolute top-[-10px] right-[-10px] bg-blue-50 w-24 h-24 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
             <Users className="w-8 h-8 text-blue-600 mb-4 relative z-10" />
             <div className="relative z-10">
@@ -143,11 +168,17 @@ const MemberManager: React.FC<MemberManagerProps> = ({
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-2 py-1 rounded-lg border border-amber-100 flex items-center gap-1"><Crown className="w-2.5 h-2.5" /> 방장 {leaderCount}</span>
                 <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg border border-indigo-100">운영진 {staffCount}</span>
-                <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg">일반 {members.length - staffCount - leaderCount}</span>
               </div>
             </div>
-          </div>
-          <div className="bg-white rounded-[32px] p-6 lg:p-8 border border-slate-200 shadow-sm flex flex-col justify-between overflow-hidden relative group hover:shadow-xl hover:shadow-green-50 transition-all">
+          </button>
+
+          {/* 신규 회원 카드 */}
+          <button 
+            onClick={() => setFilterMode('new')}
+            className={`text-left bg-white rounded-[32px] p-6 lg:p-8 border shadow-sm flex flex-col justify-between overflow-hidden relative group transition-all ${
+              filterMode === 'new' ? 'border-green-500 ring-2 ring-green-50 shadow-xl' : 'border-slate-200 hover:shadow-xl hover:shadow-green-50'
+            }`}
+          >
             <div className="absolute top-[-10px] right-[-10px] bg-green-50 w-24 h-24 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
             <UserRoundPlus className="w-8 h-8 text-green-600 mb-4 relative z-10" />
             <div className="relative z-10">
@@ -159,8 +190,15 @@ const MemberManager: React.FC<MemberManagerProps> = ({
                 ))}
               </div>
             </div>
-          </div>
-          <div className="bg-white rounded-[32px] p-6 lg:p-8 border border-slate-200 shadow-sm flex flex-col justify-between overflow-hidden relative group hover:shadow-xl hover:shadow-red-50 transition-all">
+          </button>
+
+          {/* 장기 휴면 관리 카드 (사용자 요청) */}
+          <button 
+            onClick={() => setFilterMode('inactive')}
+            className={`text-left bg-white rounded-[32px] p-6 lg:p-8 border shadow-sm flex flex-col justify-between overflow-hidden relative group transition-all ${
+              filterMode === 'inactive' ? 'border-red-500 ring-2 ring-red-50 shadow-xl' : 'border-slate-200 hover:shadow-xl hover:shadow-red-50'
+            }`}
+          >
             <div className="absolute top-[-10px] right-[-10px] bg-red-50 w-24 h-24 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
             <Zap className="w-8 h-8 text-red-500 mb-4 relative z-10" />
             <div className="relative z-10">
@@ -168,11 +206,11 @@ const MemberManager: React.FC<MemberManagerProps> = ({
               <h4 className="text-4xl lg:text-5xl font-black text-slate-900 mt-1">{inactiveCount}<span className="text-lg font-bold text-slate-400 ml-1">명</span></h4>
               <p className="text-[10px] font-bold text-red-400 mt-4 leading-relaxed">최근 4개월간 참석 기록이 없는 인원입니다.</p>
             </div>
-          </div>
+          </button>
         </div>
       )}
 
-      {!isBulkEdit && newMembersThisMonth.length > 0 && (
+      {!isBulkEdit && newMembersThisMonth.length > 0 && filterMode !== 'inactive' && (
         <div className="bg-white rounded-3xl p-5 lg:px-8 border border-blue-100 shadow-sm animate-in fade-in slide-in-from-left-4 duration-500">
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="flex items-center gap-3 shrink-0">
@@ -202,7 +240,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({
       {isAdmin && !isBulkEdit && (
         <div className="bg-white rounded-[32px] p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-4">
           <div className="flex-1 w-full">
-            <h3 className="text-[10px] font-black mb-2 text-slate-400 flex items-center gap-2 uppercase tracking-widest"><UserPlus className="w-3.5 h-3.5 text-blue-600" /> 신규 회원 퀵 추가 (기본 가입일: 2026-01-01)</h3>
+            <h3 className="text-[10px] font-black mb-2 text-slate-400 flex items-center gap-2 uppercase tracking-widest"><UserPlus className="w-3.5 h-3.5 text-blue-600" /> 신규 회원 퀵 추가</h3>
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="새로운 회원의 이름을 입력하세요" className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-100 outline-none transition-all font-bold text-sm" />
               <button type="submit" disabled={!newName.trim()} className="px-6 py-3.5 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 disabled:bg-slate-300 transition-all text-sm active:scale-95">추가</button>
@@ -232,9 +270,25 @@ const MemberManager: React.FC<MemberManagerProps> = ({
 
       <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 lg:p-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-6">
-          <div>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight">Member List</h3>
-            <p className="text-[10px] text-slate-400 font-black mt-0.5 uppercase tracking-widest">Active Database System</p>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                {filterMode === 'all' ? 'Member List' : 
+                 filterMode === 'new' ? `${month+1}월 신규 가입자 명단` : 
+                 '장기 휴면 회원 명단'}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-black mt-0.5 uppercase tracking-widest">
+                {filterMode === 'all' ? 'ACTIVE DATABASE SYSTEM' : 'FILTERED VIEW MODE'}
+              </p>
+            </div>
+            {filterMode !== 'all' && (
+              <button 
+                onClick={() => setFilterMode('all')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 text-[10px] font-black rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                <X className="w-3 h-3" /> 필터 해제
+              </button>
+            )}
           </div>
           {!isBulkEdit && (
             <div className="relative w-full sm:w-80">
@@ -277,7 +331,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({
                   const totalNoShow = getTotalNoShowCount(member.id);
                   const isNewThisMonth = member.joinedAt.startsWith(monthPrefix);
                   const daysPassed = lastAttendance ? getDaysDiff(lastAttendance) : 0;
-                  const isInactive = lastAttendance && ((isNewThisMonth && daysPassed >= 60) || (!isNewThisMonth && daysPassed >= 120));
+                  const isInactive = isMemberInactive(member);
 
                   return (
                     <div key={member.id} className={`p-5 lg:p-6 flex items-center justify-between hover:bg-slate-50/80 transition-all group ${member.isLeader ? 'bg-amber-50/20' : member.isStaff ? 'bg-indigo-50/20' : ''}`}>
@@ -303,7 +357,6 @@ const MemberManager: React.FC<MemberManagerProps> = ({
                       </div>
 
                       <div className="flex items-center gap-6 lg:gap-10">
-                        {/* Attendance Count with No-show small below */}
                         <div className="flex flex-col items-end">
                           <div className="flex items-center gap-1">
                             <span className="text-2xl lg:text-3xl font-black text-slate-800 tracking-tighter leading-none">{totalAttendance}</span>
@@ -326,7 +379,13 @@ const MemberManager: React.FC<MemberManagerProps> = ({
                   );
                 })
               ) : (
-                <div className="p-20 text-center flex flex-col items-center gap-4 text-slate-300"><Search className="w-10 h-10 opacity-10" /><p className="text-sm font-black uppercase tracking-tighter">No Members Found</p></div>
+                <div className="p-20 text-center flex flex-col items-center gap-4 text-slate-300">
+                  <Search className="w-10 h-10 opacity-10" />
+                  <p className="text-sm font-black uppercase tracking-tighter">No Members Found</p>
+                  {filterMode !== 'all' && (
+                    <button onClick={() => setFilterMode('all')} className="text-blue-500 text-xs font-bold underline">전체 목록 보기</button>
+                  )}
+                </div>
               )}
             </div>
           )}
